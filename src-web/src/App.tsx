@@ -71,6 +71,8 @@ export function App() {
   const [wakePulling, setWakePulling] = useState(false);
   const [booted, setBooted] = useState(false);
   const saveTimer = useRef<number | null>(null);
+  const padRef = useRef<HTMLElement | null>(null);
+  const padMotion = useRef<Animation | null>(null);
   const tabsRef = useRef<HTMLElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -100,6 +102,38 @@ export function App() {
       window.setTimeout(() => setSwitching(false), 210);
     });
   }, [reducedMotion]);
+
+  const hiddenTransform = useCallback(
+    () => "translateX(calc(100% + clamp(18px, 4vw, 54px))) scaleX(0.94) scaleY(0.99)",
+    [],
+  );
+
+  const stopPadMotion = useCallback(() => {
+    if (!padMotion.current) return;
+    padMotion.current.cancel();
+    padMotion.current = null;
+  }, []);
+
+  const animatePad = useCallback(
+    (keyframes: Keyframe[], options: KeyframeAnimationOptions, done: () => void) => {
+      const pad = padRef.current;
+      if (!pad) {
+        done();
+        return;
+      }
+
+      stopPadMotion();
+      padMotion.current = pad.animate(keyframes, { fill: "forwards", ...options });
+      padMotion.current.onfinish = () => {
+        padMotion.current = null;
+        done();
+      };
+      padMotion.current.oncancel = () => {
+        padMotion.current = null;
+      };
+    },
+    [stopPadMotion],
+  );
 
   useEffect(() => {
     let alive = true;
@@ -131,21 +165,79 @@ export function App() {
   const setHidden = useCallback(
     (hidden: boolean) => {
       setWakePulling(false);
-      setState((current) => ({ ...current, hidden }));
+      const pad = padRef.current;
+
+      if (reducedMotion || !pad) {
+        stopPadMotion();
+        setState((current) => ({ ...current, hidden }));
+        if (pad) {
+          pad.style.transform = hidden ? hiddenTransform() : "translateX(0) scaleX(1) scaleY(1)";
+          pad.style.opacity = hidden ? "0" : "1";
+        }
+        if (hidden) hideWindow().catch(() => {});
+        else showWindow().catch(() => {});
+        setSaved(hidden ? "已隐藏，按 Alt + Space 唤醒" : "已唤醒");
+        if (!hidden) {
+          requestAnimationFrame(() => textareaRef.current?.focus({ preventScroll: true }));
+        }
+        return;
+      }
+
       if (hidden) {
-        hideWindow().catch(() => {});
+        setState((current) => ({ ...current, hidden: false }));
+        animatePad(
+          [
+            { transform: "translateX(0) scaleX(1) scaleY(1)", opacity: 1, offset: 0 },
+            { transform: "translateX(-26px) scaleX(1.035) scaleY(0.99)", opacity: 1, offset: 0.24 },
+            { transform: "translateX(32px) scaleX(0.955) scaleY(1.012)", opacity: 0.96, offset: 0.48 },
+            { transform: hiddenTransform(), opacity: 0, offset: 1 },
+          ],
+          {
+            duration: 430,
+            easing: "cubic-bezier(0.62, 0, 0.18, 1)",
+          },
+          () => {
+            setState((current) => ({ ...current, hidden: true }));
+            pad.style.transform = hiddenTransform();
+            pad.style.opacity = "0";
+            hideWindow().catch(() => {});
+          },
+        );
         setSaved("已隐藏，按 Alt + Space 唤醒");
         return;
       }
+
       setWakePulling(true);
+      setState((current) => ({ ...current, hidden: false }));
       showWindow().catch(() => {});
+      pad.style.transform = hiddenTransform();
+      pad.style.opacity = "0";
+      pad.getBoundingClientRect();
+      animatePad(
+        [
+          { transform: hiddenTransform(), opacity: 0, offset: 0 },
+          { transform: "translateX(62px) scaleX(0.952) scaleY(1.012)", opacity: 0.62, offset: 0.38 },
+          { transform: "translateX(-44px) scaleX(1.052) scaleY(0.982)", opacity: 1, offset: 0.68 },
+          { transform: "translateX(16px) scaleX(0.986) scaleY(1.004)", opacity: 1, offset: 0.84 },
+          { transform: "translateX(-6px) scaleX(1.004) scaleY(0.999)", opacity: 1, offset: 0.93 },
+          { transform: "translateX(0) scaleX(1) scaleY(1)", opacity: 1, offset: 1 },
+        ],
+        {
+          duration: 760,
+          easing: "cubic-bezier(0.14, 0.84, 0.14, 1)",
+        },
+        () => {
+          pad.style.transform = "translateX(0) scaleX(1) scaleY(1)";
+          pad.style.opacity = "1";
+          setWakePulling(false);
+        },
+      );
       setSaved("已唤醒");
       requestAnimationFrame(() => {
         textareaRef.current?.focus({ preventScroll: true });
       });
-      window.setTimeout(() => setWakePulling(false), reducedMotion ? 1 : 760);
     },
-    [reducedMotion, setSaved],
+    [animatePad, hiddenTransform, reducedMotion, setSaved, stopPadMotion],
   );
 
   useEffect(() => {
@@ -249,7 +341,7 @@ export function App() {
         onClick={() => setHidden(false)}
       />
 
-      <section className={`pad${state.hidden ? " is-hidden" : ""}`} aria-label="GlazePad 透明暂存槽">
+      <section ref={padRef} className={`pad${state.hidden ? " is-hidden" : ""}`} aria-label="GlazePad 透明暂存槽">
         <div className="handle"><span aria-hidden="true" /></div>
 
         <header className="top">
