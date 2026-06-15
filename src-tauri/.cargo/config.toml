@@ -1,0 +1,5 @@
+[build]
+target-dir = "D:/Temp/GlazePad-target"
+
+[profile.dev]
+incremental = false

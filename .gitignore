@@ -15,6 +15,7 @@ src-tauri/target/
 .env
 .env.*
 !.env.example
+AGENTS.md
 
 # Logs
 *.log

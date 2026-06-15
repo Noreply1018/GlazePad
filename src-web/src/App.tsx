@@ -1,0 +1,321 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  AppState,
+  ClipboardPayload,
+  Slot,
+  hideWindow,
+  imageSrc,
+  loadState,
+  listenGlobalToggle,
+  readClipboard,
+  saveState,
+  setWindowReady,
+  showWindow,
+  writeSlot,
+} from "./tauri";
+
+const defaultSlots: Slot[] = [
+  { id: "tab-1", title: "Tab 1", type: "text", content: "把临时要复用的内容放在这里。当前 Tab 只有这一个存储框。" },
+  { id: "tab-2", title: "Tab 2", type: "text", content: "例如：一段回复、一条命令、一个链接，随时改、随时复制。" },
+  { id: "tab-3", title: "Tab 3", type: "text", content: "" },
+  { id: "tab-4", title: "Tab 4", type: "text", content: "" },
+];
+
+const defaultState: AppState = {
+  activeId: "tab-1",
+  hidden: false,
+  slots: defaultSlots,
+};
+
+const codePattern = /const|function|await|=>|npm|git|\.js|\.tsx/;
+
+function imageMeta(slot: Slot) {
+  if (slot.type !== "image") return "IMG · —";
+  const label = slot.imageType.includes("png")
+    ? "PNG"
+    : slot.imageType.includes("jpeg") || slot.imageType.includes("jpg")
+      ? "JPG"
+      : slot.imageType.includes("webp")
+        ? "WEBP"
+        : slot.imageType.includes("gif")
+          ? "GIF"
+          : "IMG";
+  return `${label} · ${slot.width}×${slot.height}`;
+}
+
+function slotFromClipboard(payload: ClipboardPayload, title: string): Slot | null {
+  if (payload.type === "text") {
+    return { id: `tab-${Date.now()}`, title, type: "text", content: payload.content };
+  }
+
+  if (payload.type === "image") {
+    return {
+      id: `tab-${Date.now()}`,
+      title,
+      type: "image",
+      content: "",
+      imagePath: payload.imagePath,
+      imageType: payload.imageType,
+      width: payload.width,
+      height: payload.height,
+    };
+  }
+
+  return null;
+}
+
+export function App() {
+  const [state, setState] = useState<AppState>(defaultState);
+  const [saveText, setSaveText] = useState("已本地保存");
+  const [switching, setSwitching] = useState(false);
+  const [wakePulling, setWakePulling] = useState(false);
+  const [booted, setBooted] = useState(false);
+  const saveTimer = useRef<number | null>(null);
+  const tabsRef = useRef<HTMLElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const activeSlot = useMemo(
+    () => state.slots.find((slot) => slot.id === state.activeId) ?? state.slots[0],
+    [state.activeId, state.slots],
+  );
+
+  const reducedMotion = useMemo(
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    [],
+  );
+
+  const setSaved = useCallback((text = "已本地保存") => {
+    setSaveText(text);
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => {
+      setSaveText("已本地保存");
+    }, 900);
+  }, []);
+
+  const pulseSlot = useCallback(() => {
+    if (reducedMotion) return;
+    setSwitching(false);
+    requestAnimationFrame(() => {
+      setSwitching(true);
+      window.setTimeout(() => setSwitching(false), 210);
+    });
+  }, [reducedMotion]);
+
+  useEffect(() => {
+    let alive = true;
+    loadState()
+      .then((loaded) => {
+        if (!alive || !loaded) return;
+        setState({
+          ...loaded,
+          slots: loaded.slots.length ? loaded.slots : defaultSlots,
+        });
+      })
+      .finally(() => {
+        if (!alive) return;
+        setBooted(true);
+        setWindowReady().catch(() => {});
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!booted) return;
+    saveState(state).catch(() => {
+      setSaved("保存失败");
+    });
+  }, [booted, setSaved, state]);
+
+  const setHidden = useCallback(
+    (hidden: boolean) => {
+      setWakePulling(false);
+      setState((current) => ({ ...current, hidden }));
+      if (hidden) {
+        hideWindow().catch(() => {});
+        setSaved("已隐藏，按 Alt + Space 唤醒");
+        return;
+      }
+      setWakePulling(true);
+      showWindow().catch(() => {});
+      setSaved("已唤醒");
+      requestAnimationFrame(() => {
+        textareaRef.current?.focus({ preventScroll: true });
+      });
+      window.setTimeout(() => setWakePulling(false), reducedMotion ? 1 : 760);
+    },
+    [reducedMotion, setSaved],
+  );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey && event.code === "Space") {
+        event.preventDefault();
+        setHidden(!state.hidden);
+        return;
+      }
+      if (event.key === "Escape" && !state.hidden) {
+        event.preventDefault();
+        setHidden(true);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [setHidden, state.hidden]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listenGlobalToggle(() => {
+      setHidden(!state.hidden);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, [setHidden, state.hidden]);
+
+  const activate = (id: string) => {
+    if (state.activeId === id) return;
+    setState((current) => ({ ...current, activeId: id }));
+    pulseSlot();
+  };
+
+  const addTab = async () => {
+    const payload = await readClipboard().catch(() => ({ type: "empty" as const }));
+    const nextSlot = slotFromClipboard(payload, `Tab ${state.slots.length + 1}`);
+
+    if (!nextSlot) {
+      setSaved("剪贴板为空");
+      return;
+    }
+
+    setState((current) => ({
+      ...current,
+      activeId: nextSlot.id,
+      slots: [...current.slots, nextSlot],
+    }));
+    pulseSlot();
+    requestAnimationFrame(() => {
+      if (tabsRef.current) tabsRef.current.scrollLeft = tabsRef.current.scrollWidth;
+    });
+    setSaved(nextSlot.type === "image" ? "已收纳图片" : "已新增 Tab");
+  };
+
+  const deleteTab = () => {
+    if (state.slots.length <= 1) {
+      setSaved("至少保留一个暂存槽");
+      return;
+    }
+
+    const index = state.slots.findIndex((slot) => slot.id === state.activeId);
+    const nextSlots = state.slots.filter((slot) => slot.id !== state.activeId);
+    const nextIndex = Math.min(index, nextSlots.length - 1);
+    setState((current) => ({
+      ...current,
+      activeId: nextSlots[nextIndex].id,
+      slots: nextSlots,
+    }));
+    pulseSlot();
+    setSaved("已删除 Tab");
+  };
+
+  const updateText = (content: string) => {
+    setState((current) => ({
+      ...current,
+      slots: current.slots.map((slot) =>
+        slot.id === current.activeId && slot.type === "text" ? { ...slot, content } : slot,
+      ),
+    }));
+    setSaved("正在保存");
+  };
+
+  const copySlot = async () => {
+    await writeSlot(activeSlot)
+      .then(() => setSaved(activeSlot.type === "image" ? "已复制图片" : "已复制"))
+      .catch(() => setSaved(activeSlot.type === "image" ? "图片复制失败" : "复制失败"));
+  };
+
+  const kind = activeSlot.type === "image" ? "image" : "text";
+  const meta = imageMeta(activeSlot);
+
+  return (
+    <main className="desktop">
+      <p className="workspace-hint">透明浮窗贴在桌面上，只保留当前暂存槽。每个 Tab 是一个独立槽位，不再是分类列表。</p>
+
+      <button
+        className={`wake-edge${state.hidden ? " is-visible" : ""}${wakePulling ? " is-pulling" : ""}`}
+        type="button"
+        aria-label="唤醒 GlazePad"
+        onClick={() => setHidden(false)}
+      />
+
+      <section className={`pad${state.hidden ? " is-hidden" : ""}`} aria-label="GlazePad 透明暂存槽">
+        <div className="handle"><span aria-hidden="true" /></div>
+
+        <header className="top">
+          <div className="bar">
+            <div className="brand">
+              <h1>GlazePad</h1>
+              <span className="saved">{saveText}</span>
+            </div>
+            <div className="top-actions" aria-label="Tab 操作">
+              <button className="copy-tab" type="button" aria-label="复制当前槽位内容" onClick={copySlot}>⧉</button>
+              <button className="new-tab danger" type="button" aria-label="删除当前 Tab" onClick={deleteTab}>−</button>
+              <button className="new-tab" type="button" aria-label="新增 Tab 并收纳当前剪贴板" onClick={addTab}>+</button>
+              <button className="hide-pad" type="button" aria-label="隐藏 GlazePad" onClick={() => setHidden(true)}>›</button>
+            </div>
+          </div>
+          <nav className="tabs" ref={tabsRef} aria-label="暂存槽">
+            {state.slots.map((slot) => (
+              <button
+                className={`tab${slot.id === state.activeId ? " active" : ""}`}
+                type="button"
+                key={slot.id}
+                onClick={() => activate(slot.id)}
+              >
+                {slot.title}
+              </button>
+            ))}
+          </nav>
+        </header>
+
+        <section className="slot" aria-label="当前暂存内容">
+          <div className={`slot-body${switching ? " is-switching" : ""}`} data-kind={kind}>
+            <textarea
+              className={`content-box${activeSlot.type === "text" && codePattern.test(activeSlot.content) ? " mono" : ""}`}
+              ref={textareaRef}
+              spellCheck={false}
+              aria-label="暂存内容"
+              disabled={kind === "image"}
+              value={activeSlot.type === "text" ? activeSlot.content : ""}
+              onChange={(event) => updateText(event.target.value)}
+            />
+            <div className="image-slot" aria-label="暂存图片预览">
+              <div className={`image-frame${activeSlot.type === "image" && !activeSlot.imagePath ? " is-empty" : ""}`}>
+                {activeSlot.type === "image" && activeSlot.imagePath ? (
+                  <img src={imageSrc(activeSlot.imagePath)} alt="当前暂存图片" />
+                ) : (
+                  <img src="" alt="当前暂存图片" />
+                )}
+                <span className="image-empty">等待收纳图片</span>
+              </div>
+              <div className="image-caption">
+                <strong>剪贴板图片</strong>
+                <span className="image-type">{meta.split(" · ")[0] ?? "IMG"}</span>
+                <span id="imageMeta">{meta}</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <footer className="foot">
+          <span className="foot-left">
+            <span>{state.slots.length} 个暂存槽 · {kind === "image" ? "图片" : "文本"}</span>
+            <span className={`image-foot-meta${kind === "image" ? " is-visible" : ""}`}>{meta}</span>
+          </span>
+          <span className="foot-right dots"><span className="dot" /><span>透明桌面模式</span></span>
+        </footer>
+      </section>
+    </main>
+  );
+}
