@@ -265,6 +265,25 @@ h1 {
   pointer-events: none;
 }
 
+.desktop.is-window-hidden {
+  min-height: 100vh;
+  padding: 0;
+  place-items: center end;
+  background: transparent;
+}
+
+.desktop.is-window-hidden::before,
+.desktop.is-window-hidden .workspace-hint {
+  display: none;
+}
+
+.desktop.is-window-hidden .wake-edge {
+  right: 0;
+  width: 12px;
+  height: 90px;
+  border-radius: 10px 0 0 10px;
+}
+
 .tabs {
   display: flex;
   gap: 6px;

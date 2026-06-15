@@ -160,11 +160,19 @@ fn show_window(window: WebviewWindow) -> AppResult<()> {
 }
 
 #[tauri::command]
-fn hide_window() -> AppResult<()> {
-    Ok(())
+fn hide_window(window: WebviewWindow) -> AppResult<()> {
+    place_wake_edge(&window)
 }
 
 fn place_window(window: &WebviewWindow) -> AppResult<()> {
+    place_sized_window(window, PhysicalSize::new(900, 520))
+}
+
+fn place_wake_edge(window: &WebviewWindow) -> AppResult<()> {
+    place_sized_window(window, PhysicalSize::new(12, 90))
+}
+
+fn place_sized_window(window: &WebviewWindow, size: PhysicalSize<u32>) -> AppResult<()> {
     let monitor = window
         .current_monitor()
         .map_err(|err| err.to_string())?
@@ -173,7 +181,6 @@ fn place_window(window: &WebviewWindow) -> AppResult<()> {
     if let Some(monitor) = monitor {
         let monitor_pos = monitor.position();
         let monitor_size = monitor.size();
-        let size = PhysicalSize::new(900, 520);
         let x = monitor_pos.x + monitor_size.width as i32 - size.width as i32;
         let y = monitor_pos.y + ((monitor_size.height.saturating_sub(size.height)) / 2) as i32;
         window.set_size(size).map_err(|err| err.to_string())?;

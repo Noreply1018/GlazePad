@@ -331,7 +331,7 @@ export function App() {
   const meta = imageMeta(activeSlot);
 
   return (
-    <main className="desktop">
+    <main className={`desktop${state.hidden ? " is-window-hidden" : ""}`}>
       <p className="workspace-hint">透明浮窗贴在桌面上，只保留当前暂存槽。每个 Tab 是一个独立槽位，不再是分类列表。</p>
 
       <button
