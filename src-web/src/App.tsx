@@ -430,7 +430,12 @@ export function App() {
               <span className="saved">{saveText}</span>
             </div>
             <div className="top-actions" aria-label="Tab 操作">
-              <button className="copy-tab" type="button" aria-label="复制当前槽位内容" onClick={copySlot}>⧉</button>
+              <button className="copy-tab" type="button" aria-label="复制当前槽位内容" onClick={copySlot}>
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <rect x="9" y="5" width="10" height="10" rx="2.8" fill="none" stroke="currentColor" />
+                  <rect x="5" y="9" width="10" height="10" rx="2.8" fill="var(--copy-icon-mask)" stroke="currentColor" />
+                </svg>
+              </button>
               <button className="new-tab danger" type="button" aria-label="删除当前 Tab" onClick={deleteTab}>−</button>
               <button className="new-tab" type="button" aria-label="新增 Tab 并收纳当前剪贴板" onClick={addTab}>+</button>
               <button className="hide-pad" type="button" aria-label="隐藏 GlazePad" onClick={() => setHidden(true)}>›</button>

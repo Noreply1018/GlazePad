@@ -205,14 +205,27 @@ h1 {
 
 .copy-tab {
   color: var(--accent);
+  --copy-icon-mask: oklch(96% 0.018 205);
+}
+
+.copy-tab:hover {
+  --copy-icon-mask: oklch(92% 0.038 200);
+}
+
+.copy-tab svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.8;
 }
 
 .hide-pad {
-  color: var(--muted);
+  color: oklch(48% 0.13 215);
+  font-size: 19px;
+  font-weight: 650;
 }
 
 .hide-pad:hover {
-  color: var(--fg);
+  color: oklch(42% 0.16 215);
 }
 
 .wake-edge {

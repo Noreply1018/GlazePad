@@ -193,14 +193,27 @@
 
     .copy-tab {
       color: var(--accent);
+      --copy-icon-mask: oklch(96% 0.018 205);
+    }
+
+    .copy-tab:hover {
+      --copy-icon-mask: oklch(92% 0.038 200);
+    }
+
+    .copy-tab svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 1.8;
     }
 
     .hide-pad {
-      color: var(--muted);
+      color: oklch(48% 0.13 215);
+      font-size: 19px;
+      font-weight: 650;
     }
 
     .hide-pad:hover {
-      color: var(--fg);
+      color: oklch(42% 0.16 215);
     }
 
     .wake-edge {
@@ -617,7 +630,12 @@
             <span class="saved" id="saveState">已本地保存</span>
           </div>
           <div class="top-actions" aria-label="Tab 操作">
-            <button class="copy-tab" id="copySlot" type="button" aria-label="复制当前槽位内容">⧉</button>
+            <button class="copy-tab" id="copySlot" type="button" aria-label="复制当前槽位内容">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="9" y="5" width="10" height="10" rx="2.8" fill="none" stroke="currentColor"></rect>
+                <rect x="5" y="9" width="10" height="10" rx="2.8" fill="var(--copy-icon-mask)" stroke="currentColor"></rect>
+              </svg>
+            </button>
             <button class="new-tab danger" id="deleteTab" type="button" aria-label="删除当前 Tab">−</button>
             <button class="new-tab" id="addTab" type="button" aria-label="新增 Tab 并收纳当前剪贴板">+</button>
             <button class="hide-pad" id="hidePad" type="button" aria-label="隐藏 GlazePad">›</button>
@@ -700,9 +718,7 @@
     function setSaved(text = "已本地保存") {
       saveState.textContent = text;
       window.clearTimeout(setSaved.timer);
-      setSaved.timer = window.setTimeout(() => {
-        saveState.textContent = "已本地保存";
-      }, 900);
+      if (text === "已本地保存") return;
     }
 
     function renderTabs() {
