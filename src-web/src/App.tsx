@@ -100,7 +100,6 @@ export function App() {
   const [switching, setSwitching] = useState(false);
   const [wakePulling, setWakePulling] = useState(false);
   const [booted, setBooted] = useState(false);
-  const saveTimer = useRef<number | null>(null);
   const padRef = useRef<HTMLElement | null>(null);
   const padMotion = useRef<Animation | null>(null);
   const tabsRef = useRef<HTMLElement | null>(null);
@@ -122,10 +121,6 @@ export function App() {
 
   const setSaved = useCallback((text = "已本地保存") => {
     setSaveText(text);
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      setSaveText("已本地保存");
-    }, 900);
   }, []);
 
   const pulseSlot = useCallback(() => {
