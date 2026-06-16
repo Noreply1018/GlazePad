@@ -80,8 +80,8 @@ export async function hideWindow(): Promise<void> {
   if (isTauri) await invoke("hide_window");
 }
 
-export async function setWindowReady(): Promise<void> {
-  if (isTauri) await invoke("set_window_ready");
+export async function setWindowReady(hidden = false): Promise<void> {
+  if (isTauri) await invoke("set_window_ready", { hidden });
 }
 
 export async function listenGlobalToggle(callback: () => void): Promise<() => void> {

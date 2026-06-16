@@ -2,11 +2,15 @@ use arboard::{Clipboard, ImageData};
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use std::{borrow::Cow, fs, path::PathBuf};
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewWindow};
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use uuid::Uuid;
 
 type AppResult<T> = Result<T, String>;
+const PAD_WINDOW_WIDTH: f64 = 422.0;
+const PAD_WINDOW_HEIGHT: f64 = 372.0;
+const WAKE_WINDOW_WIDTH: f64 = 10.0;
+const WAKE_WINDOW_HEIGHT: f64 = 86.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -146,10 +150,18 @@ fn write_slot_to_clipboard(slot: Slot) -> AppResult<()> {
 }
 
 #[tauri::command]
-fn set_window_ready(window: WebviewWindow) -> AppResult<()> {
-    place_window(&window)?;
+fn set_window_ready(window: WebviewWindow, hidden: bool) -> AppResult<()> {
+    if hidden {
+        place_wake_edge(&window)?;
+    } else {
+        place_window(&window)?;
+    }
     window.show().map_err(|err| err.to_string())?;
-    window.set_focus().map_err(|err| err.to_string())
+    if hidden {
+        Ok(())
+    } else {
+        window.set_focus().map_err(|err| err.to_string())
+    }
 }
 
 #[tauri::command]
@@ -165,27 +177,29 @@ fn hide_window(window: WebviewWindow) -> AppResult<()> {
 }
 
 fn place_window(window: &WebviewWindow) -> AppResult<()> {
-    place_sized_window(window, PhysicalSize::new(900, 520))
+    place_sized_window(window, LogicalSize::new(PAD_WINDOW_WIDTH, PAD_WINDOW_HEIGHT))
 }
 
 fn place_wake_edge(window: &WebviewWindow) -> AppResult<()> {
-    place_sized_window(window, PhysicalSize::new(12, 90))
+    place_sized_window(window, LogicalSize::new(WAKE_WINDOW_WIDTH, WAKE_WINDOW_HEIGHT))
 }
 
-fn place_sized_window(window: &WebviewWindow, size: PhysicalSize<u32>) -> AppResult<()> {
+fn place_sized_window(window: &WebviewWindow, size: LogicalSize<f64>) -> AppResult<()> {
+    let _ = window.set_shadow(false);
     let monitor = window
         .current_monitor()
         .map_err(|err| err.to_string())?
         .or_else(|| window.primary_monitor().ok().flatten());
 
     if let Some(monitor) = monitor {
-        let monitor_pos = monitor.position();
-        let monitor_size = monitor.size();
-        let x = monitor_pos.x + monitor_size.width as i32 - size.width as i32;
-        let y = monitor_pos.y + ((monitor_size.height.saturating_sub(size.height)) / 2) as i32;
+        let scale = monitor.scale_factor();
+        let monitor_pos = monitor.position().to_logical::<f64>(scale);
+        let monitor_size = monitor.size().to_logical::<f64>(scale);
+        let x = monitor_pos.x + monitor_size.width - size.width;
+        let y = monitor_pos.y + ((monitor_size.height - size.height).max(0.0) / 2.0);
         window.set_size(size).map_err(|err| err.to_string())?;
         window
-            .set_position(PhysicalPosition::new(x, y))
+            .set_position(LogicalPosition::new(x, y))
             .map_err(|err| err.to_string())?;
     }
 

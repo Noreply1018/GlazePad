@@ -14,13 +14,13 @@
       {
         "label": "main",
         "title": "GlazePad",
-        "width": 900,
-        "height": 520,
+        "width": 422,
+        "height": 372,
         "minWidth": 1,
         "minHeight": 1,
         "resizable": false,
         "decorations": false,
-        "transparent": false,
+        "transparent": true,
         "visible": false,
         "alwaysOnTop": true,
         "skipTaskbar": false

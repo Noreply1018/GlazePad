@@ -104,7 +104,7 @@ export function App() {
   }, [reducedMotion]);
 
   const hiddenTransform = useCallback(
-    () => "translateX(calc(100% + clamp(18px, 4vw, 54px))) scaleX(0.94) scaleY(0.99)",
+    () => "translateX(calc(100% + clamp(18px, 4vw, 54px))) scale(0.965)",
     [],
   );
 
@@ -137,9 +137,11 @@ export function App() {
 
   useEffect(() => {
     let alive = true;
+    let readyHidden = defaultState.hidden;
     loadState()
       .then((loaded) => {
         if (!alive || !loaded) return;
+        readyHidden = loaded.hidden;
         setState({
           ...loaded,
           slots: loaded.slots.length ? loaded.slots : defaultSlots,
@@ -148,7 +150,7 @@ export function App() {
       .finally(() => {
         if (!alive) return;
         setBooted(true);
-        setWindowReady().catch(() => {});
+        setWindowReady(readyHidden).catch(() => {});
       });
     return () => {
       alive = false;
@@ -239,6 +241,11 @@ export function App() {
     },
     [animatePad, hiddenTransform, reducedMotion, setSaved, stopPadMotion],
   );
+
+  useEffect(() => {
+    document.body.classList.toggle("is-window-hidden", state.hidden);
+    return () => document.body.classList.remove("is-window-hidden");
+  }, [state.hidden]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

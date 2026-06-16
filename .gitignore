@@ -33,3 +33,4 @@ Thumbs.db
 
 # Local app data used during development
 .local-data/
+temp/
