@@ -8,6 +8,8 @@ import {
   imageSrc,
   loadState,
   listenGlobalToggle,
+  listenStatus,
+  listenTrayHide,
   readClipboard,
   saveState,
   setWindowReady,
@@ -300,6 +302,26 @@ export function App() {
     });
     return () => unlisten?.();
   }, [setHidden, state.hidden]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listenTrayHide(() => {
+      setHidden(true);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, [setHidden]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listenStatus((message) => {
+      setSaved(message);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, [setSaved]);
 
   const scrollActiveTabIntoView = useCallback((id: string) => {
     requestAnimationFrame(() => {

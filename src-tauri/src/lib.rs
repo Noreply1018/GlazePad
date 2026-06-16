@@ -7,7 +7,16 @@ use std::{
     fs,
     path::{Path, PathBuf},
 };
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
+#[cfg(desktop)]
+use std::process::Command;
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow,
+};
+#[cfg(desktop)]
+use tauri::{
+    menu::MenuBuilder,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use uuid::Uuid;
 
@@ -16,6 +25,11 @@ const PAD_WINDOW_WIDTH: f64 = 422.0;
 const PAD_WINDOW_HEIGHT: f64 = 372.0;
 const WAKE_WINDOW_WIDTH: f64 = 42.0;
 const WAKE_WINDOW_HEIGHT: f64 = 86.0;
+const TRAY_SHOW: &str = "show";
+const TRAY_HIDE: &str = "hide";
+const TRAY_OPEN_DATA: &str = "open_data";
+const TRAY_ABOUT: &str = "about";
+const TRAY_QUIT: &str = "quit";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -262,6 +276,97 @@ fn place_sized_window(window: &WebviewWindow, size: LogicalSize<f64>) -> AppResu
         .map_err(|err| err.to_string())
 }
 
+#[cfg(desktop)]
+fn show_pad(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit("glazepad-global-toggle", ());
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[cfg(desktop)]
+fn hide_pad(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit("glazepad-tray-hide", ());
+        let _ = window.show();
+    }
+}
+
+#[cfg(desktop)]
+fn open_data_dir(app: &AppHandle) {
+    let Ok(dir) = app_dir(app) else {
+        return;
+    };
+
+    #[cfg(target_os = "windows")]
+    {
+        let _ = Command::new("explorer").arg(dir).spawn();
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let _ = Command::new("open").arg(dir).spawn();
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let _ = Command::new("xdg-open").arg(dir).spawn();
+    }
+}
+
+#[cfg(desktop)]
+fn show_about(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.emit("glazepad-status", "GlazePad 0.1.0 · Alt + Space 唤醒");
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+}
+
+#[cfg(desktop)]
+fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    let menu = MenuBuilder::new(app)
+        .text(TRAY_SHOW, "显示 GlazePad")
+        .text(TRAY_HIDE, "隐藏到桌面边缘")
+        .separator()
+        .text(TRAY_OPEN_DATA, "打开数据目录")
+        .text(TRAY_ABOUT, "关于 GlazePad")
+        .separator()
+        .text(TRAY_QUIT, "退出")
+        .build()?;
+
+    let mut tray = TrayIconBuilder::with_id("main")
+        .menu(&menu)
+        .tooltip("GlazePad")
+        .show_menu_on_left_click(false)
+        .on_menu_event(|app, event| match event.id().as_ref() {
+            TRAY_SHOW => show_pad(app),
+            TRAY_HIDE => hide_pad(app),
+            TRAY_OPEN_DATA => open_data_dir(app),
+            TRAY_ABOUT => show_about(app),
+            TRAY_QUIT => app.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_pad(tray.app_handle());
+            }
+        });
+
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray = tray.icon(icon);
+    }
+
+    tray.build(app)?;
+    Ok(())
+}
+
 pub fn run() {
     let shortcut = Shortcut::new(Some(Modifiers::ALT), Code::Space);
 
@@ -282,6 +387,7 @@ pub fn run() {
         .setup(move |app| {
             #[cfg(desktop)]
             app.global_shortcut().register(shortcut)?;
+            setup_tray(app)?;
 
             if let Some(window) = app.get_webview_window("main") {
                 let _ = place_window(&window);

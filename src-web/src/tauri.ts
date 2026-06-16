@@ -98,3 +98,13 @@ export async function listenGlobalToggle(callback: () => void): Promise<() => vo
   if (!isTauri) return () => {};
   return listen("glazepad-global-toggle", callback);
 }
+
+export async function listenTrayHide(callback: () => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  return listen("glazepad-tray-hide", callback);
+}
+
+export async function listenStatus(callback: (message: string) => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  return listen<string>("glazepad-status", (event) => callback(event.payload));
+}
