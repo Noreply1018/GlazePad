@@ -1,0 +1,7 @@
+interface:
+  display_name: "GlazePad HTML To Tauri"
+  short_description: "Port reference HTML to GlazePad Tauri faithfully"
+  default_prompt: "Use $glazepad-html-tauri-port to replicate the reference HTML in the GlazePad React + Tauri app with pixel-level fidelity."
+
+policy:
+  allow_implicit_invocation: true

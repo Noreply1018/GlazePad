@@ -1,0 +1,7 @@
+interface:
+  display_name: "GlazePad Windows Debug Loop"
+  short_description: "Debug GlazePad Tauri on Windows reliably"
+  default_prompt: "Use $glazepad-windows-debug-loop to sync, run, inspect, and validate the GlazePad Windows Tauri app."
+
+policy:
+  allow_implicit_invocation: true
