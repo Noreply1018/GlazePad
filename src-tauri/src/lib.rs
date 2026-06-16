@@ -1,5 +1,4 @@
 use arboard::{Clipboard, ImageData};
-use base64::{engine::general_purpose, Engine as _};
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -163,13 +162,6 @@ fn write_slot_to_clipboard(slot: Slot) -> AppResult<()> {
     }
 }
 
-#[tauri::command]
-fn read_image_data_url(image_path: String) -> AppResult<String> {
-    let bytes = fs::read(&image_path).map_err(|err| format!("无法读取图片预览：{err}"))?;
-    let encoded = general_purpose::STANDARD.encode(bytes);
-    Ok(format!("data:image/png;base64,{encoded}"))
-}
-
 fn cleanup_unreferenced_images(app: &AppHandle, state: &AppState) -> AppResult<()> {
     let dir = image_dir(app)?;
     let keep: HashSet<PathBuf> = state
@@ -200,6 +192,11 @@ fn cleanup_unreferenced_images(app: &AppHandle, state: &AppState) -> AppResult<(
     }
 
     Ok(())
+}
+
+#[tauri::command]
+fn cleanup_images(app: AppHandle, state: AppState) -> AppResult<()> {
+    cleanup_unreferenced_images(&app, &state)
 }
 
 fn canonicalize_existing(path: &Path) -> Option<PathBuf> {
@@ -297,7 +294,7 @@ pub fn run() {
             save_state,
             read_clipboard,
             write_slot_to_clipboard,
-            read_image_data_url,
+            cleanup_images,
             set_window_ready,
             show_window,
             hide_window

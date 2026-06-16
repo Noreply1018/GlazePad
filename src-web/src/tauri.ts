@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
 export type TextSlot = {
@@ -42,11 +42,11 @@ export type ClipboardPayload =
 
 const isTauri = "__TAURI_INTERNALS__" in window;
 
-export async function imageSrc(path: string): Promise<string> {
+export function imageSrc(path: string): string {
   if (!path) return "";
   if (!isTauri) return path;
 
-  return invoke<string>("read_image_data_url", { imagePath: path });
+  return convertFileSrc(path);
 }
 
 export async function loadState(): Promise<AppState | null> {
@@ -57,6 +57,11 @@ export async function loadState(): Promise<AppState | null> {
 export async function saveState(state: AppState): Promise<void> {
   if (!isTauri) return;
   await invoke("save_state", { state });
+}
+
+export async function cleanupImages(state: AppState): Promise<void> {
+  if (!isTauri) return;
+  await invoke("cleanup_images", { state });
 }
 
 export async function readClipboard(): Promise<ClipboardPayload> {

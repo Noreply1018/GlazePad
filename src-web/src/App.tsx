@@ -3,6 +3,7 @@ import {
   AppState,
   ClipboardPayload,
   Slot,
+  cleanupImages,
   hideWindow,
   imageSrc,
   loadState,
@@ -96,7 +97,6 @@ function slotFromClipboard(payload: ClipboardPayload, title: string): Slot | nul
 export function App() {
   const [state, setState] = useState<AppState>(defaultState);
   const [saveText, setSaveText] = useState("已本地保存");
-  const [activeImageSrc, setActiveImageSrc] = useState("");
   const [switching, setSwitching] = useState(false);
   const [wakePulling, setWakePulling] = useState(false);
   const [booted, setBooted] = useState(false);
@@ -109,6 +109,10 @@ export function App() {
   const activeSlot = useMemo(
     () => state.slots.find((slot) => slot.id === state.activeId) ?? state.slots[0],
     [state.activeId, state.slots],
+  );
+  const activeImageSrc = useMemo(
+    () => (activeSlot.type === "image" ? imageSrc(activeSlot.imagePath) : ""),
+    [activeSlot],
   );
 
   const reducedMotion = useMemo(
@@ -172,7 +176,9 @@ export function App() {
       .then((loaded) => {
         if (!alive || !loaded) return;
         readyHidden = loaded.hidden;
-        setState(normalizeState(loaded));
+        const nextState = normalizeState(loaded);
+        setState(nextState);
+        cleanupImages(nextState).catch(() => {});
       })
       .finally(() => {
         if (!alive) return;
@@ -190,25 +196,6 @@ export function App() {
       setSaved(`保存失败：${String(error).slice(0, 46)}`);
     });
   }, [booted, setSaved, state]);
-
-  useEffect(() => {
-    let alive = true;
-    setActiveImageSrc("");
-
-    if (activeSlot.type !== "image") return;
-
-    imageSrc(activeSlot.imagePath)
-      .then((src) => {
-        if (alive) setActiveImageSrc(src);
-      })
-      .catch(() => {
-        if (alive) setSaved("图片预览失败");
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [activeSlot, setSaved]);
 
   const setHidden = useCallback(
     (hidden: boolean) => {
@@ -319,14 +306,31 @@ export function App() {
     return () => unlisten?.();
   }, [setHidden, state.hidden]);
 
+  const scrollActiveTabIntoView = useCallback((id: string) => {
+    requestAnimationFrame(() => {
+      const tab = tabsRef.current?.querySelector<HTMLButtonElement>(`[data-tab-id="${id}"]`);
+      tab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    });
+  }, []);
+
+  useEffect(() => {
+    scrollActiveTabIntoView(state.activeId);
+  }, [scrollActiveTabIntoView, state.activeId]);
+
   const activate = (id: string) => {
-    if (state.activeId === id) return;
+    if (state.activeId === id) {
+      scrollActiveTabIntoView(id);
+      return;
+    }
     setState((current) => ({ ...current, activeId: id }));
     pulseSlot();
   };
 
   const addTab = async () => {
-    const payload = await readClipboard().catch(() => null);
+    const payload = await readClipboard().catch((error) => {
+      setSaved(`剪贴板读取失败：${String(error).slice(0, 34)}`);
+      return null;
+    });
 
     if (!payload) {
       setSaved("剪贴板读取失败");
@@ -336,7 +340,7 @@ export function App() {
     const nextSlot = slotFromClipboard(payload, nextTabTitle(state.slots));
 
     if (!nextSlot) {
-      setSaved("剪贴板为空");
+      setSaved(payload.type === "empty" ? "剪贴板为空" : "剪贴板图片缺少路径");
       return;
     }
 
@@ -349,7 +353,7 @@ export function App() {
     setState(nextState);
     pulseSlot();
     requestAnimationFrame(() => {
-      if (tabsRef.current) tabsRef.current.scrollLeft = tabsRef.current.scrollWidth;
+      scrollActiveTabIntoView(nextSlot.id);
     });
     await saveState(nextState)
       .then(() => {
@@ -369,13 +373,16 @@ export function App() {
     const index = state.slots.findIndex((slot) => slot.id === state.activeId);
     const nextSlots = state.slots.filter((slot) => slot.id !== state.activeId);
     const nextIndex = Math.min(index, nextSlots.length - 1);
-    setState((current) => ({
-      ...current,
+    const nextState = {
+      ...state,
       activeId: nextSlots[nextIndex].id,
       slots: nextSlots,
-    }));
+    };
+    setState(nextState);
     pulseSlot();
-    setSaved("已删除 Tab");
+    saveState(nextState)
+      .then(() => setSaved("已删除 Tab"))
+      .catch((error) => setSaved(`保存失败：${String(error).slice(0, 46)}`));
   };
 
   const updateText = (content: string) => {
@@ -389,6 +396,11 @@ export function App() {
   };
 
   const copySlot = async () => {
+    if (activeSlot.type === "text" && !activeSlot.content.trim()) {
+      setSaved("当前文本为空");
+      return;
+    }
+
     await writeSlot(activeSlot)
       .then(() => setSaved(activeSlot.type === "image" ? "已复制图片" : "已复制"))
       .catch(() => setSaved(activeSlot.type === "image" ? "图片复制失败" : "复制失败"));
@@ -430,6 +442,7 @@ export function App() {
                 className={`tab${slot.id === state.activeId ? " active" : ""}`}
                 type="button"
                 key={slot.id}
+                data-tab-id={slot.id}
                 onClick={() => activate(slot.id)}
               >
                 {slot.title}
