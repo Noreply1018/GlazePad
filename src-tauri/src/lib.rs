@@ -9,7 +9,7 @@ use uuid::Uuid;
 type AppResult<T> = Result<T, String>;
 const PAD_WINDOW_WIDTH: f64 = 422.0;
 const PAD_WINDOW_HEIGHT: f64 = 372.0;
-const WAKE_WINDOW_WIDTH: f64 = 10.0;
+const WAKE_WINDOW_WIDTH: f64 = 42.0;
 const WAKE_WINDOW_HEIGHT: f64 = 86.0;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

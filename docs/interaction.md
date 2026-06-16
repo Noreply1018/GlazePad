@@ -1,6 +1,6 @@
 # GlazePad 交互设计
 
-本文档以当前 Open Design 原型 `index.html` 为准。GlazePad 现在不是剪贴板历史、分类收藏夹或侧边栏列表，而是一个贴在桌面上的透明短浮窗：每个 Tab 是一个独立暂存槽，每个槽位只保存一份内容。
+本文档以当前 Open Design 原型 `docs/prototypes/final-open-design.html` 为准。GlazePad 现在不是剪贴板历史、分类收藏夹或侧边栏列表，而是一个贴在桌面上的透明短浮窗：每个 Tab 是一个独立暂存槽，每个槽位只保存一份内容。
 
 ## 交互原则
 
