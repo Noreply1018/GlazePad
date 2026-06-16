@@ -57,6 +57,18 @@ GlazePad_*_x64-setup.exe
 
 安装后 GlazePad 会常驻系统托盘。首次运行时，Windows 可能因为安装包尚未代码签名而显示 SmartScreen 提示；确认来源是本项目 Release 后可继续运行。
 
+## 安全下载
+
+- 只从本仓库的 GitHub Releases 下载 GlazePad 安装包。
+- 当前安装包暂未代码签名，Windows 可能显示“未知发布者”或 SmartScreen 提示。
+- 发布页会记录安装包 sha256，可用于核对下载文件是否和发布资产一致。
+
+Windows PowerShell 校验示例：
+
+```powershell
+Get-FileHash .\GlazePad_0.1.0_x64-setup.exe -Algorithm SHA256
+```
+
 ## 使用
 
 - 点击 `+` 会把当前系统剪贴板里的文本或图片收纳为新的 Tab。
@@ -72,6 +84,18 @@ GlazePad_*_x64-setup.exe
 - 暂未代码签名，可能触发 Windows SmartScreen 提示。
 - 暂未提供自动更新能力。
 - GlazePad 不是完整剪贴板历史，只有主动收纳进 Tab 的内容会保存。
+
+## 卸载与数据清理
+
+卸载程序会移除 GlazePad 的程序文件，但本地数据目录可能会保留，以避免误删用户暂存内容。
+
+如需彻底清理数据，请在卸载后手动删除：
+
+```text
+C:\Users\<YourName>\AppData\Roaming\com.glazepad.app
+```
+
+删除该目录会清除所有 Tab、文本内容、图片文件和隐藏状态。
 
 ## 开发
 
