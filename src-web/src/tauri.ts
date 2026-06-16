@@ -104,7 +104,7 @@ export async function listenTrayHide(callback: () => void): Promise<() => void> 
   return listen("glazepad-tray-hide", callback);
 }
 
-export async function listenStatus(callback: (message: string) => void): Promise<() => void> {
+export async function listenAbout(callback: (message: string) => void): Promise<() => void> {
   if (!isTauri) return () => {};
-  return listen<string>("glazepad-status", (event) => callback(event.payload));
+  return listen<string>("glazepad-about", (event) => callback(event.payload));
 }

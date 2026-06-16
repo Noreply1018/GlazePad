@@ -7,8 +7,8 @@ import {
   hideWindow,
   imageSrc,
   loadState,
+  listenAbout,
   listenGlobalToggle,
-  listenStatus,
   listenTrayHide,
   readClipboard,
   saveState,
@@ -102,6 +102,7 @@ export function App() {
   const [switching, setSwitching] = useState(false);
   const [wakePulling, setWakePulling] = useState(false);
   const [booted, setBooted] = useState(false);
+  const [aboutText, setAboutText] = useState("");
   const padRef = useRef<HTMLElement | null>(null);
   const padMotion = useRef<Animation | null>(null);
   const tabsRef = useRef<HTMLElement | null>(null);
@@ -315,13 +316,14 @@ export function App() {
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
-    listenStatus((message) => {
-      setSaved(message);
+    listenAbout((message) => {
+      setAboutText(message);
+      setHidden(false);
     }).then((dispose) => {
       unlisten = dispose;
     });
     return () => unlisten?.();
-  }, [setSaved]);
+  }, [setHidden]);
 
   const scrollActiveTabIntoView = useCallback((id: string) => {
     requestAnimationFrame(() => {
@@ -429,6 +431,25 @@ export function App() {
   return (
     <main className={`desktop${state.hidden ? " is-window-hidden" : ""}`}>
       <p className="workspace-hint">透明浮窗贴在桌面上，只保留当前暂存槽。每个 Tab 是一个独立槽位，不再是分类列表。</p>
+
+      {aboutText ? (
+        <div className="about-backdrop" role="presentation" onClick={() => setAboutText("")}>
+          <section
+            className="about-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="关于 GlazePad"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div>
+              <h2>GlazePad</h2>
+              <p>{aboutText}</p>
+            </div>
+            <p>透明暂存槽，常驻系统托盘。按 Alt + Space 唤醒或隐藏。</p>
+            <button type="button" onClick={() => setAboutText("")}>关闭</button>
+          </section>
+        </div>
+      ) : null}
 
       <button
         className={`wake-edge${state.hidden ? " is-visible" : ""}${wakePulling ? " is-pulling" : ""}`}

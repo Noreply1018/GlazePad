@@ -318,7 +318,7 @@ fn open_data_dir(app: &AppHandle) {
 #[cfg(desktop)]
 fn show_about(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.emit("glazepad-status", "GlazePad 0.1.0 · Alt + Space 唤醒");
+        let _ = window.emit("glazepad-about", "GlazePad 0.1.0");
         let _ = window.show();
         let _ = window.set_focus();
     }
