@@ -30,7 +30,10 @@ const defaultState: AppState = {
 const codePattern = /const|function|await|=>|npm|git|\.js|\.tsx/;
 
 function createSlotId() {
-  return `tab-${crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return `tab-${crypto.randomUUID()}`;
+  }
+  return `tab-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
 function nextTabTitle(slots: Slot[]) {
@@ -71,13 +74,17 @@ function slotFromClipboard(payload: ClipboardPayload, title: string): Slot | nul
   }
 
   if (payload.type === "image") {
+    const imagePath = payload.imagePath ?? payload.image_path ?? "";
+    const imageType = payload.imageType ?? payload.image_type ?? "image/png";
+    if (!imagePath) return null;
+
     return {
       id: createSlotId(),
       title,
       type: "image",
       content: "",
-      imagePath: payload.imagePath,
-      imageType: payload.imageType,
+      imagePath,
+      imageType,
       width: payload.width,
       height: payload.height,
     };
@@ -89,6 +96,7 @@ function slotFromClipboard(payload: ClipboardPayload, title: string): Slot | nul
 export function App() {
   const [state, setState] = useState<AppState>(defaultState);
   const [saveText, setSaveText] = useState("已本地保存");
+  const [activeImageSrc, setActiveImageSrc] = useState("");
   const [switching, setSwitching] = useState(false);
   const [wakePulling, setWakePulling] = useState(false);
   const [booted, setBooted] = useState(false);
@@ -178,10 +186,29 @@ export function App() {
 
   useEffect(() => {
     if (!booted) return;
-    saveState(state).catch(() => {
-      setSaved("保存失败");
+    saveState(state).catch((error) => {
+      setSaved(`保存失败：${String(error).slice(0, 46)}`);
     });
   }, [booted, setSaved, state]);
+
+  useEffect(() => {
+    let alive = true;
+    setActiveImageSrc("");
+
+    if (activeSlot.type !== "image") return;
+
+    imageSrc(activeSlot.imagePath)
+      .then((src) => {
+        if (alive) setActiveImageSrc(src);
+      })
+      .catch(() => {
+        if (alive) setSaved("图片预览失败");
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [activeSlot, setSaved]);
 
   const setHidden = useCallback(
     (hidden: boolean) => {
@@ -313,16 +340,24 @@ export function App() {
       return;
     }
 
-    setState((current) => ({
-      ...current,
+    const nextState = {
+      ...state,
       activeId: nextSlot.id,
-      slots: [...current.slots, nextSlot],
-    }));
+      slots: [...state.slots, nextSlot],
+    };
+
+    setState(nextState);
     pulseSlot();
     requestAnimationFrame(() => {
       if (tabsRef.current) tabsRef.current.scrollLeft = tabsRef.current.scrollWidth;
     });
-    setSaved(nextSlot.type === "image" ? "已收纳图片" : "已新增 Tab");
+    await saveState(nextState)
+      .then(() => {
+        setSaved(nextSlot.type === "image" ? "已收纳图片" : "已新增 Tab");
+      })
+      .catch((error) => {
+        setSaved(`保存失败：${String(error).slice(0, 46)}`);
+      });
   };
 
   const deleteTab = () => {
@@ -415,9 +450,9 @@ export function App() {
               onChange={(event) => updateText(event.target.value)}
             />
             <div className="image-slot" aria-label="暂存图片预览">
-              <div className={`image-frame${activeSlot.type === "image" && !activeSlot.imagePath ? " is-empty" : ""}`}>
-                {activeSlot.type === "image" && activeSlot.imagePath ? (
-                  <img src={imageSrc(activeSlot.imagePath)} alt="当前暂存图片" />
+              <div className={`image-frame${activeSlot.type === "image" && !activeImageSrc ? " is-empty" : ""}`}>
+                {activeSlot.type === "image" && activeImageSrc ? (
+                  <img src={activeImageSrc} alt="当前暂存图片" />
                 ) : (
                   <img src="" alt="当前暂存图片" />
                 )}

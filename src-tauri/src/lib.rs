@@ -1,4 +1,5 @@
 use arboard::{Clipboard, ImageData};
+use base64::{engine::general_purpose, Engine as _};
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -26,21 +27,25 @@ struct AppState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(tag = "type")]
 enum Slot {
     #[serde(rename = "text")]
+    #[serde(rename_all = "camelCase")]
     Text {
         id: String,
         title: String,
         content: String,
     },
     #[serde(rename = "image")]
+    #[serde(rename_all = "camelCase")]
     Image {
         id: String,
         title: String,
         #[serde(default)]
         content: String,
+        #[serde(rename = "imagePath", alias = "image_path")]
         image_path: String,
+        #[serde(rename = "imageType", alias = "image_type")]
         image_type: String,
         width: u32,
         height: u32,
@@ -54,7 +59,9 @@ enum ClipboardPayload {
     Text { content: String },
     #[serde(rename = "image")]
     Image {
+        #[serde(rename = "imagePath")]
         image_path: String,
+        #[serde(rename = "imageType")]
         image_type: String,
         width: u32,
         height: u32,
@@ -98,8 +105,9 @@ fn save_state(app: AppHandle, state: AppState) -> AppResult<()> {
     let path = state_path(&app)?;
     let raw =
         serde_json::to_string_pretty(&state).map_err(|err| format!("无法序列化本地状态：{err}"))?;
-    fs::write(path, raw).map_err(|err| format!("无法写入本地状态：{err}"))
-        .and_then(|_| cleanup_unreferenced_images(&app, &state))
+    fs::write(path, raw).map_err(|err| format!("无法写入本地状态：{err}"))?;
+    let _ = cleanup_unreferenced_images(&app, &state);
+    Ok(())
 }
 
 #[tauri::command]
@@ -155,6 +163,13 @@ fn write_slot_to_clipboard(slot: Slot) -> AppResult<()> {
     }
 }
 
+#[tauri::command]
+fn read_image_data_url(image_path: String) -> AppResult<String> {
+    let bytes = fs::read(&image_path).map_err(|err| format!("无法读取图片预览：{err}"))?;
+    let encoded = general_purpose::STANDARD.encode(bytes);
+    Ok(format!("data:image/png;base64,{encoded}"))
+}
+
 fn cleanup_unreferenced_images(app: &AppHandle, state: &AppState) -> AppResult<()> {
     let dir = image_dir(app)?;
     let keep: HashSet<PathBuf> = state
@@ -180,7 +195,7 @@ fn cleanup_unreferenced_images(app: &AppHandle, state: &AppState) -> AppResult<(
         };
 
         if !keep.contains(&canonical) {
-            fs::remove_file(&path).map_err(|err| format!("无法清理旧图片：{err}"))?;
+            let _ = fs::remove_file(&path);
         }
     }
 
@@ -282,6 +297,7 @@ pub fn run() {
             save_state,
             read_clipboard,
             write_slot_to_clipboard,
+            read_image_data_url,
             set_window_ready,
             show_window,
             hide_window
