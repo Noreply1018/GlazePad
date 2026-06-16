@@ -29,6 +29,28 @@ const defaultState: AppState = {
 
 const codePattern = /const|function|await|=>|npm|git|\.js|\.tsx/;
 
+function createSlotId() {
+  return `tab-${crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`}`;
+}
+
+function nextTabTitle(slots: Slot[]) {
+  const usedNumbers = slots
+    .map((slot) => /^Tab\s+(\d+)$/.exec(slot.title)?.[1])
+    .filter((value): value is string => Boolean(value))
+    .map(Number);
+  const next = usedNumbers.length ? Math.max(...usedNumbers) + 1 : slots.length + 1;
+  return `Tab ${next}`;
+}
+
+function normalizeState(loaded: AppState | null): AppState {
+  if (!loaded || !loaded.slots.length) return defaultState;
+  const hasActiveSlot = loaded.slots.some((slot) => slot.id === loaded.activeId);
+  return {
+    ...loaded,
+    activeId: hasActiveSlot ? loaded.activeId : loaded.slots[0].id,
+  };
+}
+
 function imageMeta(slot: Slot) {
   if (slot.type !== "image") return "IMG · —";
   const label = slot.imageType.includes("png")
@@ -45,12 +67,12 @@ function imageMeta(slot: Slot) {
 
 function slotFromClipboard(payload: ClipboardPayload, title: string): Slot | null {
   if (payload.type === "text") {
-    return { id: `tab-${Date.now()}`, title, type: "text", content: payload.content };
+    return { id: createSlotId(), title, type: "text", content: payload.content };
   }
 
   if (payload.type === "image") {
     return {
-      id: `tab-${Date.now()}`,
+      id: createSlotId(),
       title,
       type: "image",
       content: "",
@@ -142,10 +164,7 @@ export function App() {
       .then((loaded) => {
         if (!alive || !loaded) return;
         readyHidden = loaded.hidden;
-        setState({
-          ...loaded,
-          slots: loaded.slots.length ? loaded.slots : defaultSlots,
-        });
+        setState(normalizeState(loaded));
       })
       .finally(() => {
         if (!alive) return;
@@ -280,8 +299,14 @@ export function App() {
   };
 
   const addTab = async () => {
-    const payload = await readClipboard().catch(() => ({ type: "empty" as const }));
-    const nextSlot = slotFromClipboard(payload, `Tab ${state.slots.length + 1}`);
+    const payload = await readClipboard().catch(() => null);
+
+    if (!payload) {
+      setSaved("剪贴板读取失败");
+      return;
+    }
+
+    const nextSlot = slotFromClipboard(payload, nextTabTitle(state.slots));
 
     if (!nextSlot) {
       setSaved("剪贴板为空");

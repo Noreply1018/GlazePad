@@ -1,7 +1,12 @@
 use arboard::{Clipboard, ImageData};
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
-use std::{borrow::Cow, fs, path::PathBuf};
+use std::{
+    borrow::Cow,
+    collections::HashSet,
+    fs,
+    path::{Path, PathBuf},
+};
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use uuid::Uuid;
@@ -94,6 +99,7 @@ fn save_state(app: AppHandle, state: AppState) -> AppResult<()> {
     let raw =
         serde_json::to_string_pretty(&state).map_err(|err| format!("无法序列化本地状态：{err}"))?;
     fs::write(path, raw).map_err(|err| format!("无法写入本地状态：{err}"))
+        .and_then(|_| cleanup_unreferenced_images(&app, &state))
 }
 
 #[tauri::command]
@@ -147,6 +153,42 @@ fn write_slot_to_clipboard(slot: Slot) -> AppResult<()> {
                 .map_err(|err| format!("无法写入图片剪贴板：{err}"))
         }
     }
+}
+
+fn cleanup_unreferenced_images(app: &AppHandle, state: &AppState) -> AppResult<()> {
+    let dir = image_dir(app)?;
+    let keep: HashSet<PathBuf> = state
+        .slots
+        .iter()
+        .filter_map(|slot| match slot {
+            Slot::Image { image_path, .. } => Some(PathBuf::from(image_path)),
+            Slot::Text { .. } => None,
+        })
+        .filter_map(|path| canonicalize_existing(&path))
+        .collect();
+
+    let entries = fs::read_dir(&dir).map_err(|err| format!("无法读取图片目录：{err}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|err| format!("无法读取图片文件：{err}"))?;
+        let path = entry.path();
+        if path.extension().and_then(|extension| extension.to_str()) != Some("png") {
+            continue;
+        }
+
+        let Some(canonical) = canonicalize_existing(&path) else {
+            continue;
+        };
+
+        if !keep.contains(&canonical) {
+            fs::remove_file(&path).map_err(|err| format!("无法清理旧图片：{err}"))?;
+        }
+    }
+
+    Ok(())
+}
+
+fn canonicalize_existing(path: &Path) -> Option<PathBuf> {
+    path.canonicalize().ok()
 }
 
 #[tauri::command]
