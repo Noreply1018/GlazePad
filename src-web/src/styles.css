@@ -1,20 +1,105 @@
 :root {
   --desk-a: oklch(69% 0.035 232);
   --desk-b: oklch(88% 0.018 235);
-      --glass: oklch(95% 0.018 205 / 0.46);
-      --glass-strong: oklch(97% 0.022 202 / 0.58);
-      --glass-faint: oklch(92% 0.018 205 / 0.24);
+  --glass-alpha: 0.52;
+  --glass-strong-alpha: 0.64;
+  --glass-faint-alpha: 0.30;
+  --glass: oklch(95% 0.018 205 / var(--glass-alpha));
+  --glass-strong: oklch(97% 0.022 202 / var(--glass-strong-alpha));
+  --glass-faint: oklch(92% 0.018 205 / var(--glass-faint-alpha));
   --fg: oklch(22% 0.014 245);
   --muted: oklch(50% 0.014 245);
   --faint: oklch(62% 0.012 245);
-      --line: oklch(82% 0.045 205 / 0.42);
-      --line-dark: oklch(48% 0.04 205 / 0.18);
+  --line: oklch(82% 0.045 205 / 0.42);
+  --line-dark: oklch(48% 0.04 205 / 0.18);
   --accent: oklch(58% 0.11 205);
   --accent-soft: oklch(90% 0.042 205 / 0.72);
   --danger: oklch(56% 0.16 25);
-      --shadow: none;
+  --theme-glow: oklch(88% 0.065 190 / 0.34);
+  --theme-wake-a: oklch(87% 0.05 205 / 0.44);
+  --theme-wake-b: oklch(68% 0.12 205 / 0.30);
+  --theme-tab-active: oklch(88% 0.055 195 / 0.56);
+  --shadow: none;
   --font-ui: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, ui-monospace, monospace;
+}
+
+body[data-opacity="clear"] {
+  --glass-alpha: 0.72;
+  --glass-strong-alpha: 0.80;
+  --glass-faint-alpha: 0.42;
+}
+
+body[data-opacity="standard"] {
+  --glass-alpha: 0.52;
+  --glass-strong-alpha: 0.64;
+  --glass-faint-alpha: 0.30;
+}
+
+body[data-opacity="light"] {
+  --glass-alpha: 0.38;
+  --glass-strong-alpha: 0.50;
+  --glass-faint-alpha: 0.22;
+}
+
+body[data-opacity="ultra"] {
+  --glass-alpha: 0.26;
+  --glass-strong-alpha: 0.38;
+  --glass-faint-alpha: 0.16;
+}
+
+body[data-theme="smoke"] {
+  --glass: oklch(96% 0.006 250 / var(--glass-alpha));
+  --glass-strong: oklch(98% 0.005 250 / var(--glass-strong-alpha));
+  --glass-faint: oklch(91% 0.008 250 / var(--glass-faint-alpha));
+  --line: oklch(82% 0.018 250 / 0.42);
+  --accent: oklch(52% 0.035 250);
+  --theme-glow: oklch(86% 0.018 250 / 0.34);
+  --theme-wake-a: oklch(88% 0.018 250 / 0.44);
+  --theme-wake-b: oklch(62% 0.035 250 / 0.30);
+  --theme-tab-active: oklch(88% 0.018 250 / 0.56);
+}
+
+body[data-theme="mint"] {
+  --glass: oklch(95% 0.026 164 / var(--glass-alpha));
+  --glass-strong: oklch(97% 0.030 164 / var(--glass-strong-alpha));
+  --glass-faint: oklch(91% 0.026 164 / var(--glass-faint-alpha));
+  --line: oklch(82% 0.050 164 / 0.42);
+  --accent: oklch(58% 0.10 164);
+  --theme-glow: oklch(88% 0.070 164 / 0.34);
+  --theme-wake-a: oklch(87% 0.055 164 / 0.44);
+  --theme-wake-b: oklch(67% 0.115 164 / 0.30);
+  --theme-tab-active: oklch(88% 0.060 164 / 0.56);
+}
+
+body[data-theme="rose"] {
+  --glass: oklch(95% 0.025 18 / var(--glass-alpha));
+  --glass-strong: oklch(97% 0.030 18 / var(--glass-strong-alpha));
+  --glass-faint: oklch(91% 0.025 18 / var(--glass-faint-alpha));
+  --line: oklch(82% 0.052 18 / 0.42);
+  --accent: oklch(58% 0.13 18);
+  --theme-glow: oklch(88% 0.075 18 / 0.32);
+  --theme-wake-a: oklch(87% 0.055 18 / 0.44);
+  --theme-wake-b: oklch(66% 0.13 18 / 0.30);
+  --theme-tab-active: oklch(88% 0.060 18 / 0.56);
+}
+
+body[data-theme="graphite"] {
+  --glass: oklch(31% 0.012 250 / var(--glass-alpha));
+  --glass-strong: oklch(36% 0.014 250 / var(--glass-strong-alpha));
+  --glass-faint: oklch(28% 0.012 250 / var(--glass-faint-alpha));
+  --fg: oklch(94% 0.006 250);
+  --muted: oklch(78% 0.010 250);
+  --faint: oklch(70% 0.010 250);
+  --line: oklch(62% 0.020 250 / 0.34);
+  --line-dark: oklch(90% 0.006 250 / 0.12);
+  --accent: oklch(76% 0.08 190);
+  --accent-soft: oklch(42% 0.035 210 / 0.72);
+  --theme-glow: oklch(56% 0.045 210 / 0.24);
+  --theme-wake-a: oklch(44% 0.035 210 / 0.50);
+  --theme-wake-b: oklch(54% 0.08 210 / 0.34);
+  --theme-tab-active: oklch(48% 0.035 210 / 0.62);
+  --copy-icon-mask: oklch(34% 0.014 250);
 }
 
 * { box-sizing: border-box; }
@@ -84,7 +169,7 @@ button {
   padding: 16px;
   color: var(--fg);
   background:
-    radial-gradient(circle at 18% 8%, oklch(88% 0.065 190 / 0.30), transparent 44%),
+    radial-gradient(circle at 18% 8%, var(--theme-glow), transparent 44%),
     linear-gradient(180deg, oklch(100% 0 0 / 0.46), oklch(92% 0.012 205 / 0.34)),
     var(--glass-strong);
   box-shadow:
@@ -139,7 +224,7 @@ button {
   border: 1px solid var(--line);
   border-radius: 18px;
   background:
-    radial-gradient(circle at 18% 8%, oklch(88% 0.065 190 / 0.34), transparent 42%),
+    radial-gradient(circle at 18% 8%, var(--theme-glow), transparent 42%),
     linear-gradient(180deg, oklch(100% 0 0 / 0.30), oklch(88% 0.028 205 / 0.22)),
     var(--glass);
   box-shadow: var(--shadow), inset 0 1px 0 oklch(100% 0 0 / 0.38);
@@ -303,7 +388,7 @@ h1 {
   border: 1px solid oklch(78% 0.085 205 / 0.62);
   border-right: 0;
   background:
-    linear-gradient(180deg, oklch(87% 0.05 205 / 0.44), oklch(68% 0.12 205 / 0.30)),
+    linear-gradient(180deg, var(--theme-wake-a), var(--theme-wake-b)),
     oklch(100% 0 0 / 0.10);
   box-shadow:
     0 0 0 1px oklch(100% 0 0 / 0.18) inset,
@@ -388,7 +473,7 @@ h1 {
 
 .tab.active {
   color: oklch(25% 0.035 205);
-  background: oklch(88% 0.055 195 / 0.56);
+  background: var(--theme-tab-active);
   border-color: oklch(76% 0.07 205 / 0.48);
 }
 

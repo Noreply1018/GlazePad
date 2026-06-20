@@ -1,6 +1,8 @@
 use arboard::{Clipboard, ImageData};
 use image::GenericImageView;
 use serde::{Deserialize, Serialize};
+#[cfg(desktop)]
+use std::process::Command;
 use std::{
     borrow::Cow,
     collections::HashSet,
@@ -8,15 +10,11 @@ use std::{
     path::{Path, PathBuf},
 };
 #[cfg(desktop)]
-use std::process::Command;
 use tauri::{
-    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow,
-};
-#[cfg(desktop)]
-use tauri::{
-    menu::MenuBuilder,
+    menu::{MenuBuilder, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
+use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use uuid::Uuid;
 
@@ -30,13 +28,62 @@ const TRAY_HIDE: &str = "hide";
 const TRAY_OPEN_DATA: &str = "open_data";
 const TRAY_ABOUT: &str = "about";
 const TRAY_QUIT: &str = "quit";
+const TRAY_THEME_ICE: &str = "theme_ice";
+const TRAY_THEME_SMOKE: &str = "theme_smoke";
+const TRAY_THEME_MINT: &str = "theme_mint";
+const TRAY_THEME_ROSE: &str = "theme_rose";
+const TRAY_THEME_GRAPHITE: &str = "theme_graphite";
+const TRAY_OPACITY_CLEAR: &str = "opacity_clear";
+const TRAY_OPACITY_STANDARD: &str = "opacity_standard";
+const TRAY_OPACITY_LIGHT: &str = "opacity_light";
+const TRAY_OPACITY_ULTRA: &str = "opacity_ultra";
+const TRAY_AUTOSTART: &str = "autostart";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct AppState {
     active_id: String,
     hidden: bool,
+    #[serde(default)]
+    settings: AppSettings,
     slots: Vec<Slot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AppSettings {
+    theme: ThemeName,
+    opacity: OpacityLevel,
+    autostart: bool,
+}
+
+impl Default for AppSettings {
+    fn default() -> Self {
+        Self {
+            theme: ThemeName::Ice,
+            opacity: OpacityLevel::Standard,
+            autostart: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum ThemeName {
+    Ice,
+    Smoke,
+    Mint,
+    Rose,
+    Graphite,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+enum OpacityLevel {
+    Clear,
+    Standard,
+    Light,
+    Ultra,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -245,11 +292,17 @@ fn hide_window(window: WebviewWindow) -> AppResult<()> {
 }
 
 fn place_window(window: &WebviewWindow) -> AppResult<()> {
-    place_sized_window(window, LogicalSize::new(PAD_WINDOW_WIDTH, PAD_WINDOW_HEIGHT))
+    place_sized_window(
+        window,
+        LogicalSize::new(PAD_WINDOW_WIDTH, PAD_WINDOW_HEIGHT),
+    )
 }
 
 fn place_wake_edge(window: &WebviewWindow) -> AppResult<()> {
-    place_sized_window(window, LogicalSize::new(WAKE_WINDOW_WIDTH, WAKE_WINDOW_HEIGHT))
+    place_sized_window(
+        window,
+        LogicalSize::new(WAKE_WINDOW_WIDTH, WAKE_WINDOW_HEIGHT),
+    )
 }
 
 fn place_sized_window(window: &WebviewWindow, size: LogicalSize<f64>) -> AppResult<()> {
@@ -318,7 +371,8 @@ fn open_data_dir(app: &AppHandle) {
 #[cfg(desktop)]
 fn show_about(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.emit("glazepad-about", "GlazePad 0.1.0");
+        let version = app.package_info().version.to_string();
+        let _ = window.emit("glazepad-about", format!("GlazePad {version}"));
         let _ = window.show();
         let _ = window.set_focus();
     }
@@ -326,9 +380,25 @@ fn show_about(app: &AppHandle) {
 
 #[cfg(desktop)]
 fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    let theme_menu = SubmenuBuilder::new(app, "配色")
+        .text(TRAY_THEME_ICE, "冰蓝")
+        .text(TRAY_THEME_SMOKE, "雾白")
+        .text(TRAY_THEME_MINT, "薄荷")
+        .text(TRAY_THEME_ROSE, "玫瑰")
+        .text(TRAY_THEME_GRAPHITE, "石墨")
+        .build()?;
+
+    let opacity_menu = SubmenuBuilder::new(app, "透明度")
+        .text(TRAY_OPACITY_CLEAR, "清晰")
+        .text(TRAY_OPACITY_STANDARD, "标准")
+        .text(TRAY_OPACITY_LIGHT, "轻透")
+        .text(TRAY_OPACITY_ULTRA, "极透")
+        .build()?;
+
     let menu = MenuBuilder::new(app)
-        .text(TRAY_SHOW, "显示 GlazePad")
-        .text(TRAY_HIDE, "隐藏到桌面边缘")
+        .item(&theme_menu)
+        .item(&opacity_menu)
+        .text(TRAY_AUTOSTART, "切换开机自启动")
         .separator()
         .text(TRAY_OPEN_DATA, "打开数据目录")
         .text(TRAY_ABOUT, "关于 GlazePad")
@@ -343,6 +413,36 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             TRAY_SHOW => show_pad(app),
             TRAY_HIDE => hide_pad(app),
+            TRAY_THEME_ICE => {
+                let _ = app.emit("glazepad-set-theme", "ice");
+            }
+            TRAY_THEME_SMOKE => {
+                let _ = app.emit("glazepad-set-theme", "smoke");
+            }
+            TRAY_THEME_MINT => {
+                let _ = app.emit("glazepad-set-theme", "mint");
+            }
+            TRAY_THEME_ROSE => {
+                let _ = app.emit("glazepad-set-theme", "rose");
+            }
+            TRAY_THEME_GRAPHITE => {
+                let _ = app.emit("glazepad-set-theme", "graphite");
+            }
+            TRAY_OPACITY_CLEAR => {
+                let _ = app.emit("glazepad-set-opacity", "clear");
+            }
+            TRAY_OPACITY_STANDARD => {
+                let _ = app.emit("glazepad-set-opacity", "standard");
+            }
+            TRAY_OPACITY_LIGHT => {
+                let _ = app.emit("glazepad-set-opacity", "light");
+            }
+            TRAY_OPACITY_ULTRA => {
+                let _ = app.emit("glazepad-set-opacity", "ultra");
+            }
+            TRAY_AUTOSTART => {
+                let _ = app.emit("glazepad-toggle-autostart", ());
+            }
             TRAY_OPEN_DATA => open_data_dir(app),
             TRAY_ABOUT => show_about(app),
             TRAY_QUIT => app.exit(0),
@@ -384,6 +484,10 @@ pub fn run() {
                 })
                 .build(),
         )
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None,
+        ))
         .setup(move |app| {
             #[cfg(desktop)]
             app.global_shortcut().register(shortcut)?;

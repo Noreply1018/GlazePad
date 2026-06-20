@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AppState,
+  AppSettings,
   ClipboardPayload,
   Slot,
   cleanupImages,
@@ -8,10 +9,15 @@ import {
   imageSrc,
   loadState,
   listenAbout,
+  listenTrayAutostart,
   listenGlobalToggle,
+  listenTrayOpacity,
   listenTrayHide,
+  listenTrayTheme,
   readClipboard,
+  readAutostart,
   saveState,
+  setAutostart,
   setWindowReady,
   showWindow,
   writeSlot,
@@ -27,6 +33,11 @@ const defaultSlots: Slot[] = [
 const defaultState: AppState = {
   activeId: "tab-1",
   hidden: false,
+  settings: {
+    theme: "ice",
+    opacity: "standard",
+    autostart: false,
+  },
   slots: defaultSlots,
 };
 
@@ -40,19 +51,27 @@ function createSlotId() {
 }
 
 function nextTabTitle(slots: Slot[]) {
-  const usedNumbers = slots
-    .map((slot) => /^Tab\s+(\d+)$/.exec(slot.title)?.[1])
-    .filter((value): value is string => Boolean(value))
-    .map(Number);
-  const next = usedNumbers.length ? Math.max(...usedNumbers) + 1 : slots.length + 1;
+  const usedNumbers = new Set(
+    slots
+      .map((slot) => /^Tab\s+(\d+)$/.exec(slot.title)?.[1])
+      .filter((value): value is string => Boolean(value))
+      .map(Number),
+  );
+  let next = 1;
+  while (usedNumbers.has(next)) next += 1;
   return `Tab ${next}`;
 }
 
 function normalizeState(loaded: AppState | null): AppState {
   if (!loaded || !loaded.slots.length) return defaultState;
   const hasActiveSlot = loaded.slots.some((slot) => slot.id === loaded.activeId);
+  const settings: AppSettings = {
+    ...defaultState.settings,
+    ...(loaded.settings ?? {}),
+  };
   return {
     ...loaded,
+    settings,
     activeId: hasActiveSlot ? loaded.activeId : loaded.slots[0].id,
   };
 }
@@ -94,6 +113,10 @@ function slotFromClipboard(payload: ClipboardPayload, title: string): Slot | nul
   }
 
   return null;
+}
+
+function blankTextSlot(title: string): Slot {
+  return { id: createSlotId(), title, type: "text", content: "" };
 }
 
 export function App() {
@@ -172,11 +195,20 @@ export function App() {
     let readyHidden = defaultState.hidden;
     loadState()
       .then((loaded) => {
-        if (!alive || !loaded) return;
-        readyHidden = loaded.hidden;
+        if (!alive) return;
         const nextState = normalizeState(loaded);
+        readyHidden = nextState.hidden;
         setState(nextState);
         cleanupImages(nextState).catch(() => {});
+        readAutostart()
+          .then((enabled) => {
+            if (!alive) return;
+            setState((current) => ({
+              ...current,
+              settings: { ...current.settings, autostart: enabled },
+            }));
+          })
+          .catch(() => {});
       })
       .finally(() => {
         if (!alive) return;
@@ -279,6 +311,15 @@ export function App() {
   }, [state.hidden]);
 
   useEffect(() => {
+    document.body.dataset.theme = state.settings.theme;
+    document.body.dataset.opacity = state.settings.opacity;
+    return () => {
+      delete document.body.dataset.theme;
+      delete document.body.dataset.opacity;
+    };
+  }, [state.settings.opacity, state.settings.theme]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.altKey && event.code === "Space") {
         event.preventDefault();
@@ -325,6 +366,55 @@ export function App() {
     return () => unlisten?.();
   }, [setHidden]);
 
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listenTrayTheme((theme) => {
+      setState((current) => ({
+        ...current,
+        settings: { ...current.settings, theme },
+      }));
+      setSaved("已切换配色");
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, [setSaved]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listenTrayOpacity((opacity) => {
+      setState((current) => ({
+        ...current,
+        settings: { ...current.settings, opacity },
+      }));
+      setSaved("已调整透明度");
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, [setSaved]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listenTrayAutostart(() => {
+      const nextEnabled = !state.settings.autostart;
+      setAutostart(nextEnabled)
+        .then(() => {
+          setState((current) => ({
+            ...current,
+            settings: { ...current.settings, autostart: nextEnabled },
+          }));
+          setSaved(nextEnabled ? "已开启开机自启动" : "已关闭开机自启动");
+        })
+        .catch((error) => {
+          setSaved(`自启动设置失败：${String(error).slice(0, 38)}`);
+        });
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, [setSaved, state.settings.autostart]);
+
   const scrollActiveTabIntoView = useCallback((id: string) => {
     requestAnimationFrame(() => {
       const tab = tabsRef.current?.querySelector<HTMLButtonElement>(`[data-tab-id="${id}"]`);
@@ -345,7 +435,35 @@ export function App() {
     pulseSlot();
   };
 
-  const addTab = async () => {
+  const appendSlot = useCallback(
+    (nextSlot: Slot, savedText: string) => {
+      const nextState = {
+        ...state,
+        activeId: nextSlot.id,
+        slots: [...state.slots, nextSlot],
+      };
+
+      setState(nextState);
+      pulseSlot();
+      requestAnimationFrame(() => {
+        scrollActiveTabIntoView(nextSlot.id);
+      });
+      return saveState(nextState)
+        .then(() => {
+          setSaved(savedText);
+        })
+        .catch((error) => {
+          setSaved(`保存失败：${String(error).slice(0, 46)}`);
+        });
+    },
+    [pulseSlot, scrollActiveTabIntoView, setSaved, state],
+  );
+
+  const addBlankTab = async () => {
+    await appendSlot(blankTextSlot(nextTabTitle(state.slots)), "已新增空白 Tab");
+  };
+
+  const collectClipboardTab = async () => {
     const payload = await readClipboard().catch((error) => {
       setSaved(`剪贴板读取失败：${String(error).slice(0, 34)}`);
       return null;
@@ -363,24 +481,7 @@ export function App() {
       return;
     }
 
-    const nextState = {
-      ...state,
-      activeId: nextSlot.id,
-      slots: [...state.slots, nextSlot],
-    };
-
-    setState(nextState);
-    pulseSlot();
-    requestAnimationFrame(() => {
-      scrollActiveTabIntoView(nextSlot.id);
-    });
-    await saveState(nextState)
-      .then(() => {
-        setSaved(nextSlot.type === "image" ? "已收纳图片" : "已新增 Tab");
-      })
-      .catch((error) => {
-        setSaved(`保存失败：${String(error).slice(0, 46)}`);
-      });
+    await appendSlot(nextSlot, nextSlot.type === "image" ? "已收纳图片" : "已收纳文本");
   };
 
   const deleteTab = () => {
@@ -422,7 +523,7 @@ export function App() {
 
     await writeSlot(activeSlot)
       .then(() => setSaved(activeSlot.type === "image" ? "已复制图片" : "已复制"))
-      .catch(() => setSaved(activeSlot.type === "image" ? "图片复制失败" : "复制失败"));
+      .catch((error) => setSaved(`复制失败：${String(error).slice(0, 44)}`));
   };
 
   const kind = activeSlot.type === "image" ? "image" : "text";
@@ -475,7 +576,18 @@ export function App() {
                 </svg>
               </button>
               <button className="new-tab danger" type="button" aria-label="删除当前 Tab" onClick={deleteTab}>−</button>
-              <button className="new-tab" type="button" aria-label="新增 Tab 并收纳当前剪贴板" onClick={addTab}>+</button>
+              <button
+                className="new-tab"
+                type="button"
+                aria-label="单击新增空白 Tab，右键收纳当前剪贴板"
+                onClick={addBlankTab}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  collectClipboardTab();
+                }}
+              >
+                +
+              </button>
               <button className="hide-pad" type="button" aria-label="隐藏 GlazePad" onClick={() => setHidden(true)}>›</button>
             </div>
           </div>

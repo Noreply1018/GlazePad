@@ -1,5 +1,15 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+
+export type ThemeName = "ice" | "smoke" | "mint" | "rose" | "graphite";
+export type OpacityLevel = "clear" | "standard" | "light" | "ultra";
+
+export type AppSettings = {
+  theme: ThemeName;
+  opacity: OpacityLevel;
+  autostart: boolean;
+};
 
 export type TextSlot = {
   id: string;
@@ -24,6 +34,7 @@ export type Slot = TextSlot | ImageSlot;
 export type AppState = {
   activeId: string;
   hidden: boolean;
+  settings: AppSettings;
   slots: Slot[];
 };
 
@@ -71,6 +82,17 @@ export async function readClipboard(): Promise<ClipboardPayload> {
   return text?.trim() ? { type: "text", content: text } : { type: "empty" };
 }
 
+export async function readAutostart(): Promise<boolean> {
+  if (!isTauri) return false;
+  return isEnabled();
+}
+
+export async function setAutostart(enabled: boolean): Promise<void> {
+  if (!isTauri) return;
+  if (enabled) await enable();
+  else await disable();
+}
+
 export async function writeSlot(slot: Slot): Promise<void> {
   if (isTauri) {
     await invoke("write_slot_to_clipboard", { slot });
@@ -107,4 +129,19 @@ export async function listenTrayHide(callback: () => void): Promise<() => void> 
 export async function listenAbout(callback: (message: string) => void): Promise<() => void> {
   if (!isTauri) return () => {};
   return listen<string>("glazepad-about", (event) => callback(event.payload));
+}
+
+export async function listenTrayTheme(callback: (theme: ThemeName) => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  return listen<ThemeName>("glazepad-set-theme", (event) => callback(event.payload));
+}
+
+export async function listenTrayOpacity(callback: (opacity: OpacityLevel) => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  return listen<OpacityLevel>("glazepad-set-opacity", (event) => callback(event.payload));
+}
+
+export async function listenTrayAutostart(callback: () => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  return listen("glazepad-toggle-autostart", callback);
 }
