@@ -1,8 +1,8 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { disable, enable, isEnabled } from "@tauri-apps/plugin-autostart";
+import { isEnabled } from "@tauri-apps/plugin-autostart";
 
-export type ThemeName = "ice" | "smoke" | "mint" | "rose" | "graphite";
+export type ThemeName = "ice" | "smoke" | "mint" | "rose";
 export type OpacityLevel = "clear" | "standard" | "light" | "ultra";
 
 export type AppSettings = {
@@ -87,10 +87,13 @@ export async function readAutostart(): Promise<boolean> {
   return isEnabled();
 }
 
-export async function setAutostart(enabled: boolean): Promise<void> {
+export async function syncTraySettings(settings: AppSettings): Promise<void> {
   if (!isTauri) return;
-  if (enabled) await enable();
-  else await disable();
+  await invoke("sync_tray_settings", {
+    theme: settings.theme,
+    opacity: settings.opacity,
+    autostart: settings.autostart,
+  });
 }
 
 export async function writeSlot(slot: Slot): Promise<void> {
@@ -144,4 +147,14 @@ export async function listenTrayOpacity(callback: (opacity: OpacityLevel) => voi
 export async function listenTrayAutostart(callback: () => void): Promise<() => void> {
   if (!isTauri) return () => {};
   return listen("glazepad-toggle-autostart", callback);
+}
+
+export async function listenAutostartChanged(callback: (enabled: boolean) => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  return listen<boolean>("glazepad-autostart-changed", (event) => callback(event.payload));
+}
+
+export async function listenAutostartFailed(callback: (message: string) => void): Promise<() => void> {
+  if (!isTauri) return () => {};
+  return listen<string>("glazepad-autostart-failed", (event) => callback(event.payload));
 }

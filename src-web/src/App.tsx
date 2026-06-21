@@ -9,6 +9,8 @@ import {
   imageSrc,
   loadState,
   listenAbout,
+  listenAutostartChanged,
+  listenAutostartFailed,
   listenTrayAutostart,
   listenGlobalToggle,
   listenTrayOpacity,
@@ -17,9 +19,9 @@ import {
   readClipboard,
   readAutostart,
   saveState,
-  setAutostart,
   setWindowReady,
   showWindow,
+  syncTraySettings,
   writeSlot,
 } from "./tauri";
 
@@ -69,6 +71,9 @@ function normalizeState(loaded: AppState | null): AppState {
     ...defaultState.settings,
     ...(loaded.settings ?? {}),
   };
+  if (!["ice", "smoke", "mint", "rose"].includes(settings.theme)) {
+    settings.theme = defaultState.settings.theme;
+  }
   return {
     ...loaded,
     settings,
@@ -130,6 +135,8 @@ export function App() {
   const padMotion = useRef<Animation | null>(null);
   const tabsRef = useRef<HTMLElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const hiddenRef = useRef(defaultState.hidden);
+  const transitionRef = useRef(false);
 
   const activeSlot = useMemo(
     () => state.slots.find((slot) => slot.id === state.activeId) ?? state.slots[0],
@@ -167,6 +174,7 @@ export function App() {
     if (!padMotion.current) return;
     padMotion.current.cancel();
     padMotion.current = null;
+    transitionRef.current = false;
   }, []);
 
   const animatePad = useCallback(
@@ -178,13 +186,16 @@ export function App() {
       }
 
       stopPadMotion();
+      transitionRef.current = true;
       padMotion.current = pad.animate(keyframes, { fill: "forwards", ...options });
       padMotion.current.onfinish = () => {
         padMotion.current = null;
+        transitionRef.current = false;
         done();
       };
       padMotion.current.oncancel = () => {
         padMotion.current = null;
+        transitionRef.current = false;
       };
     },
     [stopPadMotion],
@@ -227,13 +238,24 @@ export function App() {
     });
   }, [booted, setSaved, state]);
 
+  useEffect(() => {
+    hiddenRef.current = state.hidden;
+  }, [state.hidden]);
+
+  useEffect(() => {
+    if (!booted) return;
+    syncTraySettings(state.settings).catch(() => {});
+  }, [booted, state.settings]);
+
   const setHidden = useCallback(
     (hidden: boolean) => {
+      if (transitionRef.current && hidden !== hiddenRef.current) return;
       setWakePulling(false);
       const pad = padRef.current;
 
       if (reducedMotion || !pad) {
         stopPadMotion();
+        hiddenRef.current = hidden;
         setState((current) => ({ ...current, hidden }));
         if (pad) {
           pad.style.transform = hidden ? hiddenTransform() : "translateX(0) scaleX(1) scaleY(1)";
@@ -249,6 +271,7 @@ export function App() {
       }
 
       if (hidden) {
+        hiddenRef.current = true;
         setState((current) => ({ ...current, hidden: false }));
         animatePad(
           [
@@ -262,6 +285,7 @@ export function App() {
             easing: "cubic-bezier(0.62, 0, 0.18, 1)",
           },
           () => {
+            hiddenRef.current = true;
             setState((current) => ({ ...current, hidden: true }));
             pad.style.transform = hiddenTransform();
             pad.style.opacity = "0";
@@ -273,6 +297,7 @@ export function App() {
       }
 
       setWakePulling(true);
+      hiddenRef.current = false;
       setState((current) => ({ ...current, hidden: false }));
       showWindow().catch(() => {});
       pad.style.transform = hiddenTransform();
@@ -323,27 +348,27 @@ export function App() {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.altKey && event.code === "Space") {
         event.preventDefault();
-        setHidden(!state.hidden);
+        setHidden(!hiddenRef.current);
         return;
       }
-      if (event.key === "Escape" && !state.hidden) {
+      if (event.key === "Escape" && !hiddenRef.current) {
         event.preventDefault();
         setHidden(true);
       }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [setHidden, state.hidden]);
+  }, [setHidden]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listenGlobalToggle(() => {
-      setHidden(!state.hidden);
+      setHidden(!hiddenRef.current);
     }).then((dispose) => {
       unlisten = dispose;
     });
     return () => unlisten?.();
-  }, [setHidden, state.hidden]);
+  }, [setHidden]);
 
   useEffect(() => {
     let unlisten: (() => void) | undefined;
@@ -397,23 +422,36 @@ export function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     listenTrayAutostart(() => {
-      const nextEnabled = !state.settings.autostart;
-      setAutostart(nextEnabled)
-        .then(() => {
-          setState((current) => ({
-            ...current,
-            settings: { ...current.settings, autostart: nextEnabled },
-          }));
-          setSaved(nextEnabled ? "已开启开机自启动" : "已关闭开机自启动");
-        })
-        .catch((error) => {
-          setSaved(`自启动设置失败：${String(error).slice(0, 38)}`);
-        });
+      setSaved("正在切换开机自启动");
     }).then((dispose) => {
       unlisten = dispose;
     });
     return () => unlisten?.();
-  }, [setSaved, state.settings.autostart]);
+  }, [setSaved]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listenAutostartChanged((enabled) => {
+      setState((current) => ({
+        ...current,
+        settings: { ...current.settings, autostart: enabled },
+      }));
+      setSaved(enabled ? "已开启开机自启动" : "已关闭开机自启动");
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, [setSaved]);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    listenAutostartFailed((message) => {
+      setSaved(message);
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+    return () => unlisten?.();
+  }, [setSaved]);
 
   const scrollActiveTabIntoView = useCallback((id: string) => {
     requestAnimationFrame(() => {

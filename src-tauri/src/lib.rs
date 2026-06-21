@@ -11,12 +11,18 @@ use std::{
 };
 #[cfg(desktop)]
 use tauri::{
-    menu::{MenuBuilder, SubmenuBuilder},
+    menu::{CheckMenuItem, MenuBuilder, MenuItem, SubmenuBuilder},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
 };
 use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewWindow};
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use uuid::Uuid;
+
+#[cfg(desktop)]
+type TrayCheckItem = CheckMenuItem<tauri::Wry>;
+#[cfg(desktop)]
+type TrayTextItem = MenuItem<tauri::Wry>;
 
 type AppResult<T> = Result<T, String>;
 const PAD_WINDOW_WIDTH: f64 = 422.0;
@@ -32,12 +38,25 @@ const TRAY_THEME_ICE: &str = "theme_ice";
 const TRAY_THEME_SMOKE: &str = "theme_smoke";
 const TRAY_THEME_MINT: &str = "theme_mint";
 const TRAY_THEME_ROSE: &str = "theme_rose";
-const TRAY_THEME_GRAPHITE: &str = "theme_graphite";
 const TRAY_OPACITY_CLEAR: &str = "opacity_clear";
 const TRAY_OPACITY_STANDARD: &str = "opacity_standard";
 const TRAY_OPACITY_LIGHT: &str = "opacity_light";
 const TRAY_OPACITY_ULTRA: &str = "opacity_ultra";
 const TRAY_AUTOSTART: &str = "autostart";
+
+#[cfg(desktop)]
+#[derive(Clone)]
+struct TrayMenuState {
+    theme_ice: TrayCheckItem,
+    theme_smoke: TrayCheckItem,
+    theme_mint: TrayCheckItem,
+    theme_rose: TrayCheckItem,
+    opacity_clear: TrayCheckItem,
+    opacity_standard: TrayCheckItem,
+    opacity_light: TrayCheckItem,
+    opacity_ultra: TrayCheckItem,
+    autostart: TrayTextItem,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -74,7 +93,6 @@ enum ThemeName {
     Smoke,
     Mint,
     Rose,
-    Graphite,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -379,26 +397,122 @@ fn show_about(app: &AppHandle) {
 }
 
 #[cfg(desktop)]
+fn sync_tray_menu(app: &AppHandle, theme: &str, opacity: &str, autostart: bool) {
+    let state = app.state::<TrayMenuState>();
+    let _ = state.theme_ice.set_checked(theme == "ice");
+    let _ = state.theme_smoke.set_checked(theme == "smoke");
+    let _ = state.theme_mint.set_checked(theme == "mint");
+    let _ = state.theme_rose.set_checked(theme == "rose");
+    let _ = state.opacity_clear.set_checked(opacity == "clear");
+    let _ = state.opacity_standard.set_checked(opacity == "standard");
+    let _ = state.opacity_light.set_checked(opacity == "light");
+    let _ = state.opacity_ultra.set_checked(opacity == "ultra");
+    sync_tray_autostart(app, autostart);
+}
+
+#[cfg(desktop)]
+fn sync_tray_autostart(app: &AppHandle, autostart: bool) {
+    let state = app.state::<TrayMenuState>();
+    let _ = state.autostart.set_text(if autostart {
+        "开机自启动：已开启"
+    } else {
+        "开机自启动：未开启"
+    });
+}
+
+#[tauri::command]
+fn sync_tray_settings(app: AppHandle, theme: String, opacity: String, autostart: bool) {
+    #[cfg(desktop)]
+    sync_tray_menu(&app, &theme, &opacity, autostart);
+}
+
+#[cfg(desktop)]
+fn toggle_autostart(app: &AppHandle) {
+    let Ok(enabled) = app.autolaunch().is_enabled() else {
+        return;
+    };
+    let next_enabled = !enabled;
+    let result = if next_enabled {
+        app.autolaunch().enable()
+    } else {
+        app.autolaunch().disable()
+    };
+
+    if result.is_ok() {
+        sync_tray_autostart(app, next_enabled);
+        let _ = app.emit("glazepad-autostart-changed", next_enabled);
+    } else {
+        let _ = app.emit("glazepad-autostart-failed", "自启动设置失败");
+    }
+}
+
+#[cfg(desktop)]
 fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
+    let theme_ice = CheckMenuItem::with_id(app, TRAY_THEME_ICE, "冰蓝", true, true, None::<&str>)?;
+    let theme_smoke =
+        CheckMenuItem::with_id(app, TRAY_THEME_SMOKE, "雾白", true, false, None::<&str>)?;
+    let theme_mint =
+        CheckMenuItem::with_id(app, TRAY_THEME_MINT, "薄荷", true, false, None::<&str>)?;
+    let theme_rose =
+        CheckMenuItem::with_id(app, TRAY_THEME_ROSE, "玫瑰", true, false, None::<&str>)?;
+    let opacity_clear = CheckMenuItem::with_id(
+        app,
+        TRAY_OPACITY_CLEAR,
+        "清晰（72%）",
+        true,
+        false,
+        None::<&str>,
+    )?;
+    let opacity_standard = CheckMenuItem::with_id(
+        app,
+        TRAY_OPACITY_STANDARD,
+        "标准（52%）",
+        true,
+        true,
+        None::<&str>,
+    )?;
+    let opacity_light = CheckMenuItem::with_id(
+        app,
+        TRAY_OPACITY_LIGHT,
+        "轻透（38%）",
+        true,
+        false,
+        None::<&str>,
+    )?;
+    let opacity_ultra = CheckMenuItem::with_id(
+        app,
+        TRAY_OPACITY_ULTRA,
+        "极透（26%）",
+        true,
+        false,
+        None::<&str>,
+    )?;
+    let autostart = MenuItem::with_id(
+        app,
+        TRAY_AUTOSTART,
+        "开机自启动：未开启",
+        true,
+        None::<&str>,
+    )?;
+
     let theme_menu = SubmenuBuilder::new(app, "配色")
-        .text(TRAY_THEME_ICE, "冰蓝")
-        .text(TRAY_THEME_SMOKE, "雾白")
-        .text(TRAY_THEME_MINT, "薄荷")
-        .text(TRAY_THEME_ROSE, "玫瑰")
-        .text(TRAY_THEME_GRAPHITE, "石墨")
+        .item(&theme_ice)
+        .item(&theme_smoke)
+        .item(&theme_mint)
+        .item(&theme_rose)
         .build()?;
 
     let opacity_menu = SubmenuBuilder::new(app, "透明度")
-        .text(TRAY_OPACITY_CLEAR, "清晰")
-        .text(TRAY_OPACITY_STANDARD, "标准")
-        .text(TRAY_OPACITY_LIGHT, "轻透")
-        .text(TRAY_OPACITY_ULTRA, "极透")
+        .item(&opacity_clear)
+        .item(&opacity_standard)
+        .item(&opacity_light)
+        .item(&opacity_ultra)
         .build()?;
 
     let menu = MenuBuilder::new(app)
         .item(&theme_menu)
         .item(&opacity_menu)
-        .text(TRAY_AUTOSTART, "切换开机自启动")
+        .item(&autostart)
         .separator()
         .text(TRAY_OPEN_DATA, "打开数据目录")
         .text(TRAY_ABOUT, "关于 GlazePad")
@@ -425,9 +539,6 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
             TRAY_THEME_ROSE => {
                 let _ = app.emit("glazepad-set-theme", "rose");
             }
-            TRAY_THEME_GRAPHITE => {
-                let _ = app.emit("glazepad-set-theme", "graphite");
-            }
             TRAY_OPACITY_CLEAR => {
                 let _ = app.emit("glazepad-set-opacity", "clear");
             }
@@ -441,7 +552,7 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
                 let _ = app.emit("glazepad-set-opacity", "ultra");
             }
             TRAY_AUTOSTART => {
-                let _ = app.emit("glazepad-toggle-autostart", ());
+                toggle_autostart(app);
             }
             TRAY_OPEN_DATA => open_data_dir(app),
             TRAY_ABOUT => show_about(app),
@@ -464,6 +575,17 @@ fn setup_tray(app: &mut tauri::App) -> tauri::Result<()> {
     }
 
     tray.build(app)?;
+    app.manage(TrayMenuState {
+        theme_ice,
+        theme_smoke,
+        theme_mint,
+        theme_rose,
+        opacity_clear,
+        opacity_standard,
+        opacity_light,
+        opacity_ultra,
+        autostart,
+    });
     Ok(())
 }
 
@@ -505,6 +627,7 @@ pub fn run() {
             read_clipboard,
             write_slot_to_clipboard,
             cleanup_images,
+            sync_tray_settings,
             set_window_ready,
             show_window,
             hide_window
