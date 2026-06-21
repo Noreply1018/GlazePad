@@ -1,0 +1,4 @@
+interface:
+  display_name: "GlazePad Docs Maintenance"
+  short_description: "同步 GlazePad 产品变更后的文档和发布说明"
+  default_prompt: "Use $glazepad-docs-maintenance to keep GlazePad documentation aligned after a product change."
