@@ -1,12 +1,14 @@
-# 发布验证清单
+# 发布清单
 
-本文档用于发布 GlazePad 新版本前后的固定检查。发布 `0.1.x` 和 `0.2.x` 时都应按此清单执行。
+本文档只记录发布前后的固定检查。版本历史写在 `CHANGELOG.md`，未来计划写在 `docs/roadmap.md`。
 
 ## 发布前
 
 - 确认 `package.json`、`src-tauri/tauri.conf.json` 和 `src-tauri/Cargo.toml` 版本号一致。
 - 确认 `CHANGELOG.md` 已添加目标版本条目。
 - 确认 README 中的当前版本、安装方式和已知限制仍准确。
+- 确认 `docs/design.md` 和当前用户可见行为一致。
+- 确认 `docs/README.md` 中的文档分工仍准确。
 - 确认工作区干净，且没有无关改动混入发布提交。
 - 运行前端生产构建：
 
